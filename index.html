@@ -1,0 +1,188 @@
+<!DOCTYPE html>
+<html lang="nl">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Ons gezin</title>
+<style>
+:root{--bg:#fff7f5;--card:#fff;--ink:#2d2326;--mut:#8a7a7e;--acc:#e0566f;--acc2:#fbe3e8;--line:#f0dfe2;
+box-sizing:border-box;padding-top:env(safe-area-inset-top,0px);padding-bottom:env(safe-area-inset-bottom,0px)}
+@media (prefers-color-scheme:dark){:root:not([data-theme="light"]){--bg:#1d1618;--card:#2a2023;--ink:#f5eaec;--mut:#a89499;--acc:#f0728a;--acc2:#3d2a30;--line:#3a2c30}}
+:root[data-theme="dark"]{--bg:#1d1618;--card:#2a2023;--ink:#f5eaec;--mut:#a89499;--acc:#f0728a;--acc2:#3d2a30;--line:#3a2c30}
+*{box-sizing:border-box}
+html{scroll-padding-top:env(safe-area-inset-top,0px)}
+body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.4 system-ui,-apple-system,Segoe UI,sans-serif}
+main{max-width:560px;margin:0 auto;padding:16px}
+h1{font-size:22px;margin:4px 0 12px}
+nav{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-bottom:14px}
+nav button{border:1px solid var(--line);background:var(--card);color:var(--ink);border-radius:12px;padding:9px 2px;font:inherit;font-size:13px;cursor:pointer}
+nav button.on{background:var(--acc);border-color:var(--acc);color:#fff;font-weight:600}
+.note{background:var(--acc2);border-radius:12px;padding:10px 12px;font-size:14px;margin-bottom:12px}
+.add{display:flex;flex-direction:column;gap:8px;background:var(--card);border:1px solid var(--line);border-radius:14px;padding:12px;margin-bottom:14px}
+.add .row{display:flex;gap:8px}
+input,select{flex:1;min-width:0;border:1px solid var(--line);background:var(--bg);color:var(--ink);border-radius:10px;padding:10px;font:inherit}
+.add button{background:var(--acc);color:#fff;border:0;border-radius:10px;padding:10px 16px;font:inherit;font-weight:600;cursor:pointer}
+.item{display:flex;align-items:center;gap:10px;background:var(--card);border:1px solid var(--line);border-radius:12px;padding:10px 12px;margin-bottom:8px}
+.item input[type=checkbox]{flex:none;width:22px;height:22px;accent-color:var(--acc)}
+.item .t{flex:1;min-width:0;overflow-wrap:anywhere}
+.item.done .t .n{text-decoration:line-through;color:var(--mut)}
+.meta{font-size:13px;color:var(--mut)}
+.meta a{color:var(--acc)}
+.x{border:0;background:none;color:var(--mut);font-size:20px;cursor:pointer;padding:2px 6px}
+.empty{text-align:center;color:var(--mut);padding:24px 0}
+.cat{font-size:12px;font-weight:600;color:var(--acc);text-transform:uppercase;letter-spacing:.04em;margin:14px 0 6px}
+</style>
+</head>
+<body>
+<main>
+<h1>🏡 Ons gezin</h1>
+<nav id="nav"></nav>
+<div id="note"></div>
+<div id="add"></div>
+<div id="list"></div>
+<p class="meta" style="text-align:center;margin-top:28px">versie 3</p>
+</main>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2.117.2/dist/umd/supabase.js"></script>
+<script>
+(function(){
+var CATS=["Uitjes","Reizen","Eten & drinken","Overig"];
+var TABS=[["Fen","Fen"],["Ber","Ber"],["Daan","Daan"],["Sab","Sab"],["Mar","Mar"],["Joch","Joch"],["shared","Samen"]];
+var NAMES=["Fen","Ber","Daan","Sab","Mar","Joch"],items=[],me=null,tab="Fen";
+try{me=localStorage.getItem("wie_gezin")}catch(e){}
+if(NAMES.indexOf(me)<0)me=null;
+if(me)tab=me;
+var $=function(i){return document.getElementById(i)};
+function el(t,c,x){var e=document.createElement(t);if(c)e.className=c;if(x!=null)e.textContent=x;return e}
+
+var SUPABASE_URL="https://luzwlosgerrslcvcixvq.supabase.co";
+var SUPABASE_KEY="sb_publishable_bAXWlGJEysl_8h7C2yRc_Q_HL04fmkL";
+var sb=null,loadErr="",saveErr="";
+try{if(SUPABASE_URL.indexOf("http")===0)sb=supabase.createClient(SUPABASE_URL,SUPABASE_KEY)}catch(e){}
+function load(){
+  if(!sb)return;
+  sb.from("gezin_items").select("*").then(function(r){if(r.error){loadErr=r.error.message||"onbekende fout";render();return}loadErr="";if(r.data){items=r.data}render()});
+}
+function save(it){
+  var i=items.findIndex(function(a){return a.id===it.id});
+  if(i<0)items.push(it);else items[i]=it;
+  render();
+  if(sb)sb.from("gezin_items").upsert(it).then(function(r){if(r.error){saveErr="Opslaan mislukt: "+r.error.message;load()}else{saveErr=""}render()});
+}
+function del(id){
+  items=items.filter(function(a){return a.id!==id});
+  render();
+  if(sb)sb.from("gezin_items").delete().eq("id",id).then(function(r){if(r.error){saveErr="Verwijderen mislukt: "+r.error.message;load()}else{saveErr=""}render()});
+}
+function uid(){return Date.now().toString(36)+Math.random().toString(36).slice(2,6)}
+
+function visible(){
+  return items.filter(function(i){
+    if(NAMES.indexOf(tab)>=0)return i.list==="mine"&&i.owner===tab;
+    return i.list===tab;
+  }).sort(function(a,b){return (a.created||0)-(b.created||0)});
+}
+
+function safeUrl(u){return /^https?:\/\//i.test(u)?u:(u?"https://"+u:"")}
+
+function renderNav(){
+  var n=$("nav");n.textContent="";
+  TABS.forEach(function(t){
+    var b=el("button",tab===t[0]?"on":"",t[1]);
+    b.onclick=function(){tab=t[0];render()};
+    n.appendChild(b);
+  });
+}
+
+function renderAdd(){
+  var a=$("add");a.textContent="";
+  if(!me||(NAMES.indexOf(tab)>=0&&tab!==me)){return}
+  var box=el("div","add");
+  var text=el("input");text.placeholder=tab==="todo"?"Wat willen we samen doen?":"Wat wil je graag hebben?";
+  box.appendChild(text);
+  var row=el("div","row"),link,price,cat;
+  if(tab==="todo"){
+    cat=el("select");CATS.forEach(function(c){var o=el("option","",c);o.value=c;cat.appendChild(o)});
+    row.appendChild(cat);
+  }else{
+    link=el("input");link.placeholder="Link (optioneel)";
+    price=el("input");price.placeholder="Prijs";price.style.maxWidth="90px";
+    row.appendChild(link);row.appendChild(price);
+  }
+  var btn=el("button","","Toevoegen");row.appendChild(btn);box.appendChild(row);
+  function go(){
+    var v=text.value.trim();if(!v)return;
+    var it={id:uid(),list:(NAMES.indexOf(tab)>=0?"mine":tab),owner:me,text:v,done:false,created:Date.now()};
+    if(cat)it.cat=cat.value;
+    if(link&&link.value.trim())it.link=safeUrl(link.value.trim());
+    if(price&&price.value.trim())it.price=price.value.trim();
+    save(it);text.value="";if(link)link.value="";if(price)price.value="";
+  }
+  btn.onclick=go;
+  text.onkeydown=function(e){if(e.key==="Enter")go()};
+  a.appendChild(box);
+}
+
+function row(it){
+  var d=el("div","item"+(it.done?" done":""));
+  var cb=el("input");cb.type="checkbox";cb.checked=!!it.done;
+  cb.onchange=function(){var c=Object.assign({},it);c.done=cb.checked;save(c)};
+  var t=el("div","t");
+  t.appendChild(el("div","n",it.text));
+  var bits=[];
+  if(it.price)bits.push("€ "+String(it.price).replace(/^€\s*/,""));
+  var m=el("div","meta",bits.join(" · "));
+  if(it.link){if(bits.length)m.appendChild(document.createTextNode(" · "));var a=el("a","","link");a.href=it.link;a.target="_blank";a.rel="noopener noreferrer";m.appendChild(a)}
+  if(bits.length||it.link)t.appendChild(m);
+  d.appendChild(cb);d.appendChild(t);
+  if(it.owner===me){var x=el("button","x","×");x.setAttribute("aria-label","Verwijderen");x.onclick=function(){del(it.id)};d.appendChild(x)}
+  return d;
+}
+
+function renderList(){
+  var l=$("list");l.textContent="";
+  var v=visible();
+  if(!v.length){
+    var msg=(NAMES.indexOf(tab)>=0&&tab!==me)?"Nog niets van "+tab+" — "+tab+" vult dit zelf in.":"Nog niets hier. Voeg het eerste toe! ✨";
+    l.appendChild(el("div","empty",msg));return;
+  }
+  if(tab==="todo"){
+    CATS.forEach(function(c){
+      var g=v.filter(function(i){return (i.cat||"Overig")===c});
+      if(!g.length)return;
+      l.appendChild(el("div","cat",c));
+      g.forEach(function(i){l.appendChild(row(i))});
+    });
+  }else v.forEach(function(i){l.appendChild(row(i))});
+}
+
+function renderNote(){
+  var n=$("note");n.textContent="";
+  if(!sb)n.appendChild(el("div","note","Supabase is nog niet gekoppeld, dus je lijstjes worden niet bewaard of gedeeld."));
+  if(loadErr)n.appendChild(el("div","note","Ophalen mislukt: "+loadErr));
+  if(saveErr)n.appendChild(el("div","note",saveErr));
+  if(!me){
+    var c=el("div","note","Wie ben jij?");
+    NAMES.forEach(function(nm){var b=el("button","",nm);b.style.cssText="margin:6px 0 0 8px;padding:6px 14px;border-radius:10px;border:0;background:var(--acc);color:#fff;font:inherit;cursor:pointer";
+      b.onclick=function(){me=nm;tab=nm;try{localStorage.setItem("wie_gezin",nm)}catch(e){}render()};c.appendChild(b)});
+    n.appendChild(c);
+  }else{
+    var m=el("div","meta","Je bent "+me+" · ");m.style.marginBottom="10px";
+    var sw=el("a","","wisselen");sw.href="#";sw.style.color="var(--acc)";
+    sw.onclick=function(e){e.preventDefault();me=null;try{localStorage.removeItem("wie_gezin")}catch(x){}render()};
+    m.appendChild(sw);n.appendChild(m);
+  }
+}
+
+function render(){renderNav();renderNote();renderAdd();renderList()}
+
+render();
+
+if(sb){
+  load();
+  sb.channel("gezin_items").on("postgres_changes",{event:"*",schema:"public",table:"gezin_items"},load).subscribe();
+  setInterval(load,15000);
+}
+})();
+</script>
+</body>
+</html>
